@@ -1,0 +1,109 @@
+import { loadStdlib, ask } from '@reach-sh/stdlib';
+import * as backend from './build/index.main.mjs';
+// const stdlib = loadStdlib(process.env);
+const stdlib = loadStdlib();
+
+const isA = await ask.ask(`Are you A?`, ask.yesno);
+const who = isA ? 'A' : 'B';
+
+// const startingBalance = stdlib.parseCurrency(1000);
+
+// const [accA, accB] = await stdlib.newTestAccounts(2, startingBalance);
+// console.log('Hello, A and B!');
+console.log(`Starting Morra! as ${who}`);
+let acc = null;
+const createAcc = await ask.ask(
+	`Would you like to create an account? (only possible on devnet)`,
+	ask.yesno
+);
+if (createAcc) {
+	acc = await stdlib.newTestAccount(stdlib.parseCurrency(1000));
+} else {
+	const secret = await ask.ask(`What is your account secret?`, (x) => x);
+	acc = await stdlib.newAccountFromSecret(secret);
+}
+
+let ctc = null;
+if (isA) {
+	ctc = acc.contract(backend);
+	ctc.getInfo().then((info) => {
+		console.log(`The contract is deployed as = ${JSON.stringify(info)}`);
+	});
+} else {
+	const info = await ask.ask(
+		`Please paste the contract information:`,
+		JSON.parse
+	);
+	ctc = acc.contract(backend, info);
+}
+
+const fmt = (x) => stdlib.formatCurrency(x, 4);
+const getBalance = async () => fmt(await stdlib.balanceOf(acc));
+const before = await getBalance();
+console.log(`Your balance is ${before}`);
+const interact = { ...stdlib.hasRandom };
+
+interact.informTimeout = () => {
+	console.log(`There was a timeout.`);
+	process.exit(1);
+};
+
+if (isA) {
+	const amt = await ask.ask(
+		`How much do you want to wager?`,
+		stdlib.parseCurrency
+	);
+	interact.wager = amt;
+	interact.deadline = { ETH: 100, ALGO: 100, CFX: 1000 }[stdlib.connector];
+} else {
+	interact.acceptWager = async (amt) => {
+		const accepted = await ask.ask(
+			`Do you accept the wager of ${fmt(amt)}?`,
+			ask.yesno
+		);
+		if (!accepted) {
+			process.exit(0);
+		}
+	};
+}
+
+const FINGERS = [0, 1, 2, 3, 4, 5];
+const GUESS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const OUTCOME = ['Bob wins', 'Draw', 'Alice wins'];
+interact.getFingers = async () => {
+	const finger = await ask.ask(`What fingers will you play?`, (x) => {
+		const finger = FINGERS[x];
+		console.log('hhhhhhhhh', finger);
+		if (finger === undefined) {
+			throw Error(`Not a valid hand ${fingers}`);
+		}
+		return finger;
+	});
+
+	return finger;
+};
+
+interact.getGuess = async () => {
+	const guess = await ask.ask(`Guess the total number of fingers.`, (x) => {
+		const guess = GUESS[x];
+		console.log('hhhhhhhhh', guess);
+		if (guess === undefined) {
+			throw Error(`Not a valid guess ${guess}`);
+		}
+		return guess;
+	});
+
+	return guess;
+};
+
+interact.seeOutcome = async (outcome, winningNum) => {
+	console.log(
+		`The outcome is: ${OUTCOME[outcome]} and The winning number is: ${winningNum}`
+	);
+};
+
+const part = isA ? ctc.p.A : ctc.p.B;
+await part(interact);
+const after = await getBalance();
+console.log(`Your balance is now ${after}`);
+ask.done();
